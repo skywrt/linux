@@ -1,5 +1,5 @@
 #!/bin/bash
-# SkyWRT 终极一键管理脚本 (适配 skywrt.ysx66.com)
+# SkyWRT 终极一键管理脚本
 # 项目主页: https://github.com/skywrt/linux
 
 # ========================
@@ -17,7 +17,7 @@ RESET='\033[0m'
 # ========================
 # 动态域名配置
 # ========================
-DOMAIN="skywrt.ysx66.com"  # 您的GitHub Pages域名
+DOMAIN="https://sink.ysx66.com/linux"
 FALLBACK_URL="https://raw.githubusercontent.com/skywrt/linux/main/skywrt.sh"
 
 # ========================
@@ -36,7 +36,7 @@ show_banner() {
     echo -e "${CYAN}===============================================${RESET}"
     echo -e "${BOLD}         SkyWRT Linux 管理脚本 v2.2${RESET}"
     echo -e "${CYAN}===============================================${RESET}"
-    echo -e "专属域名: ${GREEN}https://${DOMAIN}${RESET}"
+    echo -e "脚本命令: ${GREEN}bash <(curl -sL ${DOMAIN}${RESET}"
     echo -e "备用命令: ${YELLOW}bash <(curl -sL ${FALLBACK_URL})${RESET}"
     echo
 }
