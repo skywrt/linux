@@ -1,8 +1,10 @@
+```bash
 #!/bin/bash
 # SkyWRT Linux 管理脚本
 # 使用方式: bash <(curl -sL https://sink.ysx66.com/linux)
-# 版本: 2.3
-# 说明: 支持系统换源、常用工具、Docker 管理、系统设置、设置快捷键、脚本更新。
+# 版本: 2.4
+# 说明: 支持系统换源（显示系统版本，Armbian 专用子菜单）、安装常用工具（照搬 kejilion.sh）、Docker 管理、系统设置、设置快捷键（改进别名设置）、脚本更新。
+# 已移除: 日志输出、远程统计、服务器集群控制、防火墙管理、系统备份与恢复、软件管理的卸载/更新/升级功能。
 
 # ========================
 # 颜色定义
@@ -25,7 +27,7 @@ FALLBACK_URL="https://raw.githubusercontent.com/skywrt/linux/main/skywrt.sh"
 # ========================
 # 全局变量
 # ========================
-SH_VERSION="2.3"
+SH_VERSION="2.4"
 
 # ========================
 # Banner 显示
@@ -299,22 +301,23 @@ EOF
 
 armbian_modify_armbian_sources() {
     echo -e "${GREEN}开始修改 Armbian 专用源 (armbian.sources)...${RESET}"
-    if [ ! -f /etc/apt/sources.list.d/armbian.sources ]; then
-        echo -e "${RED}错误: /etc/apt/sources.list.d/armbian.sources 不存在${RESET}"
-        press_any_key
-        return 1
-    fi
-    cat > /etc/apt/sources.list.d/armbian.sources << EOF
+    if [ -f /etc/apt/sources.list.d/armbian.sources ]; then
+        cat > /etc/apt/sources.list.d/armbian.sources << EOF
 Types: deb
 URIs: https://mirrors.ustc.edu.cn/armbian/
 Suites: bookworm
 Components: main bookworm-utils bookworm-desktop
 Signed-By: /usr/share/keyrings/armbian.key
 EOF
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}Armbian 专用源修改成功${RESET}"
+        if [ $? -eq 0 ]; then
+            echo -e "${GREEN}Armbian 专用源修改成功${RESET}"
+        else
+            echo -e "${RED}Armbian 专用源修改失败${RESET}"
+        fi
     else
-        echo -e "${RED}Armbian 专用源修改失败${RESET}"
+        echo -e "${RED}错误: /etc/apt/sources.list.d/armbian.sources 不存在${RESET}"
+        press_any_key
+        return 1
     fi
     press_any_key
 }
@@ -360,12 +363,12 @@ armbian_update_kernel() {
 }
 
 # ========================
-# 常用工具
+# 安装常用工具（照搬 kejilion.sh）
 # ========================
 software_menu() {
     while true; do
         show_banner
-        echo -e "${GREEN}=== 常用工具 ==="
+        echo -e "${GREEN}=== 安装常用工具 ==="
         echo -e "0. 全部安装"
         echo -e "1. curl"
         echo -e "2. wget"
@@ -828,18 +831,57 @@ setup_alias() {
     show_banner
     echo -e "${GREEN}=== 设置快捷键 ==="
     echo -e "${YELLOW}当前快捷命令: skywrt${RESET}"
+    local bashrc_file="/root/.bashrc"
     
+    # 检查 ~/.bashrc 是否可写
+    if [ ! -w "$bashrc_file" ]; then
+        echo -e "${RED}错误: 无法写入 $bashrc_file，请检查权限${RESET}"
+        press_any_key
+        return 1
+    fi
+    
+    # 输入新别名
     read -p "输入新的快捷命令 (留空保持当前): " alias_name
     if [ -z "$alias_name" ]; then
+        echo -e "${YELLOW}未输入新命令，保持当前设置${RESET}"
+        press_any_key
         return
     fi
     
-    echo "alias $alias_name='bash <(curl -sL ${DOMAIN})'" >> ~/.bashrc
-    if source ~/.bashrc; then
+    # 检查别名是否已存在
+    if grep -q "alias $alias_name=" "$bashrc_file"; then
+        echo -e "${YELLOW}警告: 别名 $alias_name 已存在${RESET}"
+        read -p "是否覆盖现有别名？(y/n): " confirm
+        if [ "$confirm" != "y" ]; then
+            echo -e "${YELLOW}取消设置新别名${RESET}"
+            press_any_key
+            return
+        fi
+        # 删除旧别名
+        sed -i "/alias $alias_name=/d" "$bashrc_file"
+    fi
+    
+    # 写入新别名
+    echo "alias $alias_name='bash <(curl -sL ${DOMAIN})'" >> "$bashrc_file"
+    if grep -q "alias $alias_name='bash <(curl -sL ${DOMAIN})'" "$bashrc_file"; then
         echo -e "${GREEN}快捷命令 $alias_name 设置成功${RESET}"
+        echo -e "别名已写入: ${BLUE}$bashrc_file${RESET}"
+        echo -e "请运行以下命令使别名立即生效: ${BLUE}source $bashrc_file${RESET}"
+        echo -e "或重新打开终端以应用更改"
         echo -e "现在可以使用: ${BLUE}$alias_name${RESET} 启动脚本"
+        
+        # 尝试加载新别名并验证
+        if source "$bashrc_file" 2>/dev/null; then
+            if alias | grep -q "^$alias_name="; then
+                echo -e "${GREEN}别名 $alias_name 已加载，可立即使用${RESET}"
+            else
+                echo -e "${YELLOW}警告: 别名 $alias_name 写入成功，但加载失败，请手动运行 'source $bashrc_file'${RESET}"
+            fi
+        else
+            echo -e "${RED}错误: 无法加载 $bashrc_file，请检查文件内容${RESET}"
+        fi
     else
-        echo -e "${RED}快捷命令设置失败${RESET}"
+        echo -e "${RED}快捷命令 $alias_name 设置失败，请检查 $bashrc_file 写入权限${RESET}"
     fi
     press_any_key
 }
@@ -1064,3 +1106,4 @@ update_script() {
 # ========================
 check_root
 main_menu
+```
