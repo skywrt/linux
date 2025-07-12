@@ -1,8 +1,8 @@
 #!/bin/bash
 # SkyWRT Linux 管理脚本
-# 使用方式: bash <(curl -sL https://sink.ysx66.com/skywrt)
-# 版本: 2.2
-# 说明: 支持系统换源（包括 Armbian）、安装常用工具、Docker 管理、系统设置、脚本更新。
+# 使用方式: bash <(curl -sL https://sink.ysx66.com/linux)
+# 版本: 2.3
+# 说明: 支持系统换源（包括 Armbian 专用子菜单，显示系统版本）、安装常用工具（照搬 kejilion.sh）、Docker 管理、系统设置、设置快捷键、脚本更新。
 # 已移除: 日志输出、远程统计、服务器集群控制、防火墙管理、系统备份与恢复、软件管理的卸载/更新/升级功能。
 
 # ========================
@@ -26,7 +26,7 @@ FALLBACK_URL="https://raw.githubusercontent.com/skywrt/linux/main/skywrt.sh"
 # ========================
 # 全局变量
 # ========================
-SH_VERSION="2.2"
+SH_VERSION="2.3"
 
 # ========================
 # Banner 显示
@@ -53,11 +53,11 @@ show_banner() {
 # 基础功能
 # ========================
 check_root() {
-    [ "$(id -u)" -ne 0 ] && {
+    if [ "$(id -u)" -ne 0 ]; then
         echo -e "${RED}错误: 此脚本需要root权限${RESET}"
         echo -e "请使用: ${BLUE}bash <(curl -sL ${DOMAIN})${RESET}"
         exit 1
-    }
+    fi
 }
 
 press_any_key() {
@@ -87,6 +87,18 @@ check_disk_space() {
     fi
 }
 
+get_system_version() {
+    if [ -f /etc/armbian-release ]; then
+        echo -e "${YELLOW}当前系统: Armbian $(grep VERSION /etc/armbian-release | cut -d '=' -f 2)${RESET}"
+    elif [ -f /etc/redhat-release ]; then
+        echo -e "${YELLOW}当前系统: $(cat /etc/redhat-release)${RESET}"
+    elif [ -f /etc/os-release ]; then
+        echo -e "${YELLOW}当前系统: $(grep PRETTY_NAME /etc/os-release | cut -d '"' -f 2)${RESET}"
+    else
+        echo -e "${YELLOW}当前系统: 未知${RESET}"
+    fi
+}
+
 # ========================
 # 主菜单
 # ========================
@@ -97,7 +109,8 @@ main_menu() {
         echo -e "2. 安装常用工具"
         echo -e "3. Docker管理"
         echo -e "4. 系统设置"
-        echo -e "5. 脚本更新${RESET}"
+        echo -e "5. 设置快捷键"
+        echo -e "6. 脚本更新${RESET}"
         echo -e "${BLUE}0. 退出${RESET}"
         echo -e "========================="
         
@@ -108,7 +121,8 @@ main_menu() {
             2) software_menu ;;
             3) docker_menu ;;
             4) system_menu ;;
-            5) update_script ;;
+            5) setup_alias ;;
+            6) update_script ;;
             0) echo -e "${GREEN}退出 SkyWRT 脚本${RESET}"; exit 0 ;;
             *) echo -e "${RED}无效选项!${RESET}"; sleep 1 ;;
         esac
@@ -122,18 +136,14 @@ source_menu() {
     while true; do
         show_banner
         echo -e "${GREEN}=== 系统换源 ==="
+        get_system_version
         if [ -f /etc/redhat-release ]; then
-            echo -e "${YELLOW}CentOS/RHEL 系统${RESET}"
             echo -e "1. 阿里云源"
             echo -e "2. 腾讯云源"
             echo -e "3. 清华大学源"
         elif [ -f /etc/armbian-release ]; then
-            echo -e "${YELLOW}Armbian 系统${RESET}"
-            echo -e "1. 清华大学源 (USTC)"
-            echo -e "2. 阿里云源"
-            echo -e "3. 华为云源"
+            echo -e "1. Armbian 换源"
         else
-            echo -e "${YELLOW}Debian/Ubuntu 系统${RESET}"
             echo -e "1. 阿里云源"
             echo -e "2. 网易源"
             echo -e "3. 华为云源"
@@ -143,20 +153,25 @@ source_menu() {
         
         read -p "请选择源: " choice
         
-        case $choice in
-            1|2|3)
-                if [ -f /etc/redhat-release ]; then
-                    centos_source "$choice"
-                elif [ -f /etc/armbian-release ]; then
-                    armbian_source "$choice"
-                else
-                    debian_source "$choice"
-                fi
-                press_any_key
-                ;;
-            0) return ;;
-            *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
-        esac
+        if [ -f /etc/redhat-release ]; then
+            case $choice in
+                1|2|3) centos_source "$choice"; press_any_key ;;
+                0) return ;;
+                *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
+            esac
+        elif [ -f /etc/armbian-release ]; then
+            case $choice in
+                1) armbian_source_menu ;;
+                0) return ;;
+                *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
+            esac
+        else
+            case $choice in
+                1|2|3) debian_source "$choice"; press_any_key ;;
+                0) return ;;
+                *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
+            esac
+        fi
     done
 }
 
@@ -169,18 +184,21 @@ centos_source() {
     esac
     
     echo -e "${GREEN}开始配置 $mirror 源...${RESET}"
-    [ -d /etc/yum.repos.d ] || { echo -e "${RED}Yum配置文件目录不存在${RESET}"; return 1; }
+    if [ ! -d /etc/yum.repos.d ]; then
+        echo -e "${RED}Yum配置文件目录不存在${RESET}"
+        return 1
+    fi
     
     mkdir -p /etc/yum.repos.d/backup
     cp /etc/yum.repos.d/*.repo /etc/yum.repos.d/backup/ 2>/dev/null
     sed -e "s|^mirrorlist=|#mirrorlist=|g" \
         -e "s|^#baseurl=http://mirror.centos.org|baseurl=https://$mirror|g" \
         -i.bak /etc/yum.repos.d/CentOS-*.repo
-    yum makecache && {
+    if yum makecache; then
         echo -e "${GREEN}换源完成!${RESET}"
-    } || {
+    else
         echo -e "${RED}换源失败!${RESET}"
-    }
+    fi
 }
 
 debian_source() {
@@ -192,122 +210,190 @@ debian_source() {
     esac
     
     echo -e "${GREEN}开始配置 $mirror 源...${RESET}"
-    [ -f /etc/apt/sources.list ] || { echo -e "${RED}APT配置文件不存在${RESET}"; return 1; }
+    if [ ! -f /etc/apt/sources.list ]; then
+        echo -e "${RED}APT配置文件不存在${RESET}"
+        return 1
+    fi
     
     cp /etc/apt/sources.list /etc/apt/sources.list.bak
     sed -i "s|http://.*archive.ubuntu.com|https://$mirror|g" /etc/apt/sources.list
-    apt update && {
+    if apt update; then
         echo -e "${GREEN}换源完成!${RESET}"
-    } || {
+    else
         echo -e "${RED}换源失败!${RESET}"
-    }
-}
-
-armbian_source() {
-    local mirror
-    case $1 in
-        1) mirror="mirrors.ustc.edu.cn" ;;
-        2) mirror="mirrors.aliyun.com" ;;
-        3) mirror="repo.huaweicloud.com" ;;
-    esac
-    
-    echo -e "${GREEN}开始配置 Armbian $mirror 源...${RESET}"
-    
-    # 备份现有源文件
-    [ -f /etc/apt/sources.list.d/debian.sources ] && cp /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list.d/debian.sources.bak
-    [ -f /etc/apt/sources.list.d/armbian.sources ] && cp /etc/apt/sources.list.d/armbian.sources /etc/apt/sources.list.d/armbian.sources.bak
-    
-    # 修改 Debian 主源
-    if [ -f /etc/apt/sources.list.d/debian.sources ]; then
-        cat > /etc/apt/sources.list.d/debian.sources << EOF
-Types: deb
-URIs: https://${mirror}/debian/
-Suites: bookworm bookworm-updates bookworm-backports
-Components: main contrib non-free non-free-firmware
-Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
-
-Types: deb
-URIs: https://${mirror}/debian-security/
-Suites: bookworm-security
-Components: main contrib non-free non-free-firmware
-Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
-EOF
-    else
-        echo -e "${YELLOW}警告: 未找到 /etc/apt/sources.list.d/debian.sources，跳过 Debian 源配置${RESET}"
-    fi
-    
-    # 修改 Armbian 专用源
-    if [ -f /etc/apt/sources.list.d/armbian.sources ]; then
-        cat > /etc/apt/sources.list.d/armbian.sources << EOF
-Types: deb
-URIs: https://${mirror}/armbian/
-Suites: bookworm
-Components: main bookworm-utils bookworm-desktop
-Signed-By: /usr/share/keyrings/armbian.key
-EOF
-    else
-        echo -e "${YELLOW}警告: 未找到 /etc/apt/sources.list.d/armbian.sources，跳过 Armbian 源配置${RESET}"
-    fi
-    
-    # 检查并导入 Armbian GPG 密钥
-    if [ ! -f /usr/share/keyrings/armbian.key ]; then
-        echo -e "${GREEN}导入 Armbian GPG 密钥...${RESET}"
-        if curl -fsSL https://apt.armbian.com/armbian.key | gpg --dearmor -o /usr/share/keyrings/armbian.key; then
-            echo -e "${GREEN}Armbian GPG 密钥导入成功${RESET}"
-        else
-            echo -e "${RED}Armbian GPG 密钥导入失败${RESET}"
-            press_any_key
-            return 1
-        fi
-    fi
-    
-    # 更新软件
-    echo -e "${GREEN}开始更新软件...${RESET}"
-    if apt update -y && apt upgrade -y && apt install -y curl wget nano; then
-        echo -e "${GREEN}软件更新完成${RESET}"
-    else
-        echo -e "${RED}软件更新失败${RESET}"
-        press_any_key
-        return 1
     fi
 }
 
-# ========================
-# 安装常用工具
-# ========================
-software_menu() {
+armbian_source_menu() {
     while true; do
         show_banner
-        echo -e "${GREEN}=== 安装常用工具 ==="
-        echo -e "1. 全部安装"
-        echo -e "2. 安装 curl"
-        echo -e "3. 安装 wget"
-        echo -e "4. 安装 git"
-        echo -e "5. 安装 vim"
-        echo -e "6. 安装 nano"
-        echo -e "7. 安装 htop"
-        echo -e "8. 安装 tmux"
-        echo -e "9. 安装 unzip"
-        echo -e "10. 安装 tree"
-        echo -e "11. 安装多个工具"
-        echo -e "${BLUE}0. 返回主菜单${RESET}"
+        echo -e "${GREEN}=== Armbian 换源 ==="
+        get_system_version
+        echo -e "1. 备份现有源文件"
+        echo -e "2. 修改 Debian 主源 (debian.sources)"
+        echo -e "3. 修改 Armbian 专用源 (armbian.sources)"
+        echo -e "4. 导入 Armbian GPG 密钥"
+        echo -e "5. 更新软件"
+        echo -e "6. 升级内核"
+        echo -e "${BLUE}0. 返回上级${RESET}"
         echo -e "========================="
         
         read -p "请选择操作: " choice
         
         case $choice in
-            1) install_all_tools ;;
-            2) install_single_tool "curl" ;;
-            3) install_single_tool "wget" ;;
-            4) install_single_tool "git" ;;
-            5) install_single_tool "vim" ;;
-            6) install_single_tool "nano" ;;
-            7) install_single_tool "htop" ;;
-            8) install_single_tool "tmux" ;;
-            9) install_single_tool "unzip" ;;
-            10) install_single_tool "tree" ;;
-            11) install_multiple_tools ;;
+            1) armbian_backup_sources ;;
+            2) armbian_modify_debian_sources ;;
+            3) armbian_modify_armbian_sources ;;
+            4) armbian_import_gpg_key ;;
+            5) armbian_update_software ;;
+            6) armbian_update_kernel ;;
             0) return ;;
+            *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
+        esac
+    done
+}
+
+armbian_backup_sources() {
+    echo -e "${GREEN}开始备份 Armbian 源文件...${RESET}"
+    if [ -f /etc/apt/sources.list.d/debian.sources ]; then
+        cp /etc/apt/sources.list.d/debian.sources /etc/apt/sources.list.d/debian.sources.bak
+        echo -e "${GREEN}已备份 /etc/apt/sources.list.d/debian.sources${RESET}"
+    else
+        echo -e "${YELLOW}警告: 未找到 /etc/apt/sources.list.d/debian.sources，跳过备份${RESET}"
+    fi
+    if [ -f /etc/apt/sources.list.d/armbian.sources ]; then
+        cp /etc/apt/sources.list.d/armbian.sources /etc/apt/sources.list.d/armbian.sources.bak
+        echo -e "${GREEN}已备份 /etc/apt/sources.list.d/armbian.sources${RESET}"
+    else
+        echo -e "${YELLOW}警告: 未找到 /etc/apt/sources.list.d/armbian.sources，跳过备份${RESET}"
+    fi
+    press_any_key
+}
+
+armbian_modify_debian_sources() {
+    echo -e "${GREEN}开始修改 Debian 主源 (debian.sources)...${RESET}"
+    if [ ! -f /etc/apt/sources.list.d/debian.sources ]; then
+        echo -e "${RED}错误: /etc/apt/sources.list.d/debian.sources 不存在${RESET}"
+        press_any_key
+        return 1
+    fi
+    cat > /etc/apt/sources.list.d/debian.sources << EOF
+Types: deb
+URIs: https://mirrors.ustc.edu.cn/debian/
+Suites: bookworm bookworm-updates bookworm-backports
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+
+Types: deb
+URIs: https://mirrors.ustc.edu.cn/debian-security/
+Suites: bookworm-security
+Components: main contrib non-free non-free-firmware
+Signed-By: /usr/share/keyrings/debian-archive-keyring.gpg
+EOF
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Debian 主源修改成功${RESET}"
+    else
+        echo -e "${RED}Debian 主源修改失败${RESET}"
+    fi
+    press_any_key
+}
+
+armbian_modify_armbian_sources() {
+    echo -e "${GREEN}开始修改 Armbian 专用源 (armbian.sources)...${RESET}"
+    if [ ! -f /etc/apt/sources.list.d/armbian.sources ]; then
+        echo -e "${RED}错误: /etc/apt/sources.list.d/armbian.sources 不存在${RESET}"
+        press_any_key
+        return 1
+    fi
+    cat > /etc/apt/sources.list.d/armbian.sources << EOF
+Types: deb
+URIs: https://mirrors.ustc.edu.cn/armbian/
+Suites: bookworm
+Components: main bookworm-utils bookworm-desktop
+Signed-By: /usr/share/keyrings/armbian.key
+EOF
+    if [ $? -eq 0 ]; then
+        echo -e "${GREEN}Armbian 专用源修改成功${RESET}"
+    else
+        echo -e "${RED}Armbian 专用源修改失败${RESET}"
+    fi
+    press_any_key
+}
+
+armbian_import_gpg_key() {
+    echo -e "${GREEN}开始导入 Armbian GPG 密钥...${RESET}"
+    if [ -f /usr/share/keyrings/armbian.key ]; then
+        echo -e "${YELLOW}Armbian GPG 密钥已存在${RESET}"
+        press_any_key
+        return
+    fi
+    if curl -fsSL https://apt.armbian.com/armbian.key | gpg --dearmor -o /usr/share/keyrings/armbian.key; then
+        echo -e "${GREEN}Armbian GPG 密钥导入成功${RESET}"
+    else
+        echo -e "${RED}Armbian GPG 密钥导入失败${RESET}"
+    fi
+    press_any_key
+}
+
+armbian_update_software() {
+    echo -e "${GREEN}开始更新软件...${RESET}"
+    if apt update -y && apt upgrade -y && apt install -y curl wget nano; then
+        echo -e "${GREEN}软件更新完成${RESET}"
+    else
+        echo -e "${RED}软件更新失败${RESET}"
+    fi
+    press_any_key
+}
+
+armbian_update_kernel() {
+    echo -e "${GREEN}开始升级内核...${RESET}"
+    if ! check_command armbian-update; then
+        echo -e "${RED}错误: armbian-update 命令未找到，请先安装${RESET}"
+        press_any_key
+        return 1
+    fi
+    if armbian-update -r zwrt/kernel -u stable -k 6.12.36; then
+        echo -e "${GREEN}内核升级到 6.12.36 成功${RESET}"
+    else
+        echo -e "${RED}内核升级失败${RESET}"
+    fi
+    press_any_key
+}
+
+# ========================
+# 安装常用工具（照搬 kejilion.sh）
+# ========================
+software_menu() {
+    while true; do
+        show_banner
+        echo -e "${GREEN}=== 安装常用工具 ==="
+        echo -e "0. 全部安装"
+        echo -e "1. curl"
+        echo -e "2. wget"
+        echo -e "3. git"
+        echo -e "4. vim"
+        echo -e "5. nano"
+        echo -e "6. htop"
+        echo -e "7. tmux"
+        echo -e "8. unzip"
+        echo -e "9. tree"
+        echo -e "${BLUE}10. 返回主菜单${RESET}"
+        echo -e "========================="
+        
+        read -p "请选择要安装的工具: " choice
+        
+        case $choice in
+            0) install_all_tools ;;
+            1) install_single_tool "curl" ;;
+            2) install_single_tool "wget" ;;
+            3) install_single_tool "git" ;;
+            4) install_single_tool "vim" ;;
+            5) install_single_tool "nano" ;;
+            6) install_single_tool "htop" ;;
+            7) install_single_tool "tmux" ;;
+            8) install_single_tool "unzip" ;;
+            9) install_single_tool "tree" ;;
+            10) return ;;
             *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
         esac
     done
@@ -317,16 +403,26 @@ install_all_tools() {
     echo -e "${GREEN}开始安装所有常用工具...${RESET}"
     local tools="curl wget git vim nano htop tmux unzip tree"
     if [ -f /etc/redhat-release ]; then
-        yum install -y epel-release
-        yum install -y $tools
+        if ! yum install -y epel-release; then
+            echo -e "${RED}无法安装 epel-release${RESET}"
+            press_any_key
+            return 1
+        fi
+        if yum install -y $tools; then
+            echo -e "${GREEN}所有工具安装成功${RESET}"
+        else
+            echo -e "${RED}部分或全部工具安装失败${RESET}"
+        fi
     else
-        apt update
-        apt install -y $tools
-    fi
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}所有工具安装成功${RESET}"
-    else
-        echo -e "${RED}部分或全部工具安装失败${RESET}"
+        if apt update; then
+            if apt install -y $tools; then
+                echo -e "${GREEN}所有工具安装成功${RESET}"
+            else
+                echo -e "${RED}部分或全部工具安装失败${RESET}"
+            fi
+        else
+            echo -e "${RED}更新软件源失败${RESET}"
+        fi
     fi
     press_any_key
 }
@@ -340,39 +436,26 @@ install_single_tool() {
         return
     fi
     if [ -f /etc/redhat-release ]; then
-        yum install -y epel-release
-        yum install -y "$tool"
+        if ! yum install -y epel-release; then
+            echo -e "${RED}无法安装 epel-release${RESET}"
+            press_any_key
+            return 1
+        fi
+        if yum install -y "$tool"; then
+            echo -e "${GREEN}$tool 安装成功${RESET}"
+        else
+            echo -e "${RED}$tool 安装失败${RESET}"
+        fi
     else
-        apt update
-        apt install -y "$tool"
-    fi
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}$tool 安装成功${RESET}"
-    else
-        echo -e "${RED}$tool 安装失败${RESET}"
-    fi
-    press_any_key
-}
-
-install_multiple_tools() {
-    read -p "请输入要安装的工具名称（以空格分隔，例如: curl wget git）: " tools
-    [ -z "$tools" ] && {
-        echo -e "${RED}请输入有效的工具名称${RESET}"
-        press_any_key
-        return
-    }
-    echo -e "${GREEN}开始安装工具: $tools...${RESET}"
-    if [ -f /etc/redhat-release ]; then
-        yum install -y epel-release
-        yum install -y $tools
-    else
-        apt update
-        apt install -y $tools
-    fi
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}工具安装成功${RESET}"
-    else
-        echo -e "${RED}部分或全部工具安装失败${RESET}"
+        if apt update; then
+            if apt install -y "$tool"; then
+                echo -e "${GREEN}$tool 安装成功${RESET}"
+            else
+                echo -e "${RED}$tool 安装失败${RESET}"
+            fi
+        else
+            echo -e "${RED}更新软件源失败${RESET}"
+        fi
     fi
     press_any_key
 }
@@ -422,9 +505,7 @@ install_docker() {
     else
         curl -fsSL https://get.docker.com | sh
     fi
-    systemctl enable docker
-    systemctl start docker
-    if [ $? -eq 0 ]; then
+    if systemctl enable docker && systemctl start docker; then
         echo -e "${GREEN}Docker安装成功${RESET}"
     else
         echo -e "${RED}Docker安装失败${RESET}"
@@ -444,8 +525,7 @@ config_docker() {
   ]
 }
 EOF
-    systemctl restart docker
-    if [ $? -eq 0 ]; then
+    if systemctl restart docker; then
         echo -e "${GREEN}Docker镜像加速配置成功${RESET}"
     else
         echo -e "${RED}Docker镜像加速配置失败${RESET}"
@@ -477,41 +557,75 @@ docker_ps() {
         case $choice in
             1)
                 read -p "请输入创建命令: " docker_cmd
-                eval "$docker_cmd" && echo -e "${GREEN}容器创建成功${RESET}"
+                if eval "$docker_cmd"; then
+                    echo -e "${GREEN}容器创建成功${RESET}"
+                else
+                    echo -e "${RED}容器创建失败${RESET}"
+                fi
                 ;;
             2)
                 read -p "请输入容器名或ID: " container
-                docker start "$container" && echo -e "${GREEN}容器 $container 启动成功${RESET}"
+                if docker start "$container"; then
+                    echo -e "${GREEN}容器 $container 启动成功${RESET}"
+                else
+                    echo -e "${RED}容器 $container 启动失败${RESET}"
+                fi
                 ;;
             3)
                 read -p "请输入容器名或ID: " container
-                docker stop "$container" && echo -e "${GREEN}容器 $container 停止成功${RESET}"
+                if docker stop "$container"; then
+                    echo -e "${GREEN}容器 $container 停止成功${RESET}"
+                else
+                    echo -e "${RED}容器 $container 停止失败${RESET}"
+                fi
                 ;;
             4)
                 read -p "请输入容器名或ID: " container
-                docker rm -f "$container" && echo -e "${GREEN}容器 $container 删除成功${RESET}"
+                if docker rm -f "$container"; then
+                    echo -e "${GREEN}容器 $container 删除成功${RESET}"
+                else
+                    echo -e "${RED}容器 $container 删除失败${RESET}"
+                fi
                 ;;
             5)
                 read -p "请输入容器名或ID: " container
-                docker restart "$container" && echo -e "${GREEN}容器 $container 重启成功${RESET}"
+                if docker restart "$container"; then
+                    echo -e "${GREEN}容器 $container 重启成功${RESET}"
+                else
+                    echo -e "${RED}容器 $container 重启失败${RESET}"
+                fi
                 ;;
             6)
-                docker start $(docker ps -a -q) && echo -e "${GREEN}所有容器启动成功${RESET}"
+                if docker start $(docker ps -a -q); then
+                    echo -e "${GREEN}所有容器启动成功${RESET}"
+                else
+                    echo -e "${RED}部分或全部容器启动失败${RESET}"
+                fi
                 ;;
             7)
-                docker stop $(docker ps -q) && echo -e "${GREEN}所有容器停止成功${RESET}"
+                if docker stop $(docker ps -q); then
+                    echo -e "${GREEN}所有容器停止成功${RESET}"
+                else
+                    echo -e "${RED}部分或全部容器停止失败${RESET}"
+                fi
                 ;;
             8)
                 read -p "确认删除所有容器？(y/n): " confirm
-                [ "$confirm" = "y" ] && docker rm -f $(docker ps -a -q) && echo -e "${GREEN}所有容器删除成功${RESET}"
+                if [ "$confirm" = "y" ]; then
+                    if docker rm -f $(docker ps -a -q); then
+                        echo -e "${GREEN}所有容器删除成功${RESET}"
+                    else
+                        echo -e "${RED}部分或全部容器删除失败${RESET}"
+                    fi
+                fi
                 ;;
             9)
                 read -p "请输入容器名或ID: " container
-                docker exec -it "$container" /bin/sh
+                docker exec -it "$container" /bin/sh || echo -e "${RED}进入容器 $container 失败${RESET}"
                 ;;
             10)
                 read -p "请输入容器名或ID: " container
-                docker logs "$container"
+                docker logs "$container" || echo -e "${RED}查看容器 $container 日志失败${RESET}"
                 ;;
             0) return ;;
             *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
@@ -538,19 +652,37 @@ docker_image() {
         case $choice in
             1)
                 read -p "请输入镜像名: " image
-                docker pull "$image" && echo -e "${GREEN}镜像 $image 拉取成功${RESET}"
+                if docker pull "$image"; then
+                    echo -e "${GREEN}镜像 $image 拉取成功${RESET}"
+                else
+                    echo -e "${RED}镜像 $image 拉取失败${RESET}"
+                fi
                 ;;
             2)
                 read -p "请输入镜像名: " image
-                docker pull "$image" && echo -e "${GREEN}镜像 $image 更新成功${RESET}"
+                if docker pull "$image"; then
+                    echo -e "${GREEN}镜像 $image 更新成功${RESET}"
+                else
+                    echo -e "${RED}镜像 $image 更新失败${RESET}"
+                fi
                 ;;
             3)
                 read -p "请输入镜像名: " image
-                docker rmi -f "$image" && echo -e "${GREEN}镜像 $image 删除成功${RESET}"
+                if docker rmi -f "$image"; then
+                    echo -e "${GREEN}镜像 $image 删除成功${RESET}"
+                else
+                    echo -e "${RED}镜像 $image 删除失败${RESET}"
+                fi
                 ;;
             4)
                 read -p "确认删除所有镜像？(y/n): " confirm
-                [ "$confirm" = "y" ] && docker rmi -f $(docker images -q) && echo -e "${GREEN}所有镜像删除成功${RESET}"
+                if [ "$confirm" = "y" ]; then
+                    if docker rmi -f $(docker images -q); then
+                        echo -e "${GREEN}所有镜像删除成功${RESET}"
+                    else
+                        echo -e "${RED}部分或全部镜像删除失败${RESET}"
+                    fi
+                fi
                 ;;
             0) return ;;
             *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
@@ -597,13 +729,13 @@ docker_ipv6_menu() {
 
 docker_ipv6_on() {
     echo -e "${GREEN}开始配置Docker IPv6...${RESET}"
-    check_command jq || {
+    if ! check_command jq; then
         if [ -f /etc/redhat-release ]; then
             yum install -y jq
         else
             apt install -y jq
         fi
-    }
+    fi
     local CONFIG_FILE="/etc/docker/daemon.json"
     local REQUIRED_IPV6_CONFIG='{"ipv6": true, "fixed-cidr-v6": "2001:db8:1::/64"}'
     
@@ -611,20 +743,23 @@ docker_ipv6_on() {
         echo "$REQUIRED_IPV6_CONFIG" | jq . > "$CONFIG_FILE"
         systemctl restart docker
     else
-        local ORIGINAL_CONFIG=$(<"$CONFIG_FILE")
+        local ORIGINAL_CONFIG=$(cat "$CONFIG_FILE")
         local CURRENT_IPV6=$(echo "$ORIGINAL_CONFIG" | jq '.ipv6 // false')
         local UPDATED_CONFIG
-        if [[ "$CURRENT_IPV6" == "false" ]]; then
+        if [ "$CURRENT_IPV6" = "false" ]; then
             UPDATED_CONFIG=$(echo "$ORIGINAL_CONFIG" | jq '. + {ipv6: true, "fixed-cidr-v6": "2001:db8:1::/64"}')
         else
             UPDATED_CONFIG=$(echo "$ORIGINAL_CONFIG" | jq '. + {"fixed-cidr-v6": "2001:db8:1::/64"}')
         fi
-        if [[ "$ORIGINAL_CONFIG" == "$UPDATED_CONFIG" ]]; then
+        if [ "$ORIGINAL_CONFIG" = "$UPDATED_CONFIG" ]; then
             echo -e "${YELLOW}当前已开启IPv6${RESET}"
         else
             echo "$UPDATED_CONFIG" | jq . > "$CONFIG_FILE"
-            systemctl restart docker
-            echo -e "${GREEN}Docker IPv6开启成功${RESET}"
+            if systemctl restart docker; then
+                echo -e "${GREEN}Docker IPv6开启成功${RESET}"
+            else
+                echo -e "${RED}Docker IPv6开启失败${RESET}"
+            fi
         fi
     fi
     press_any_key
@@ -632,28 +767,31 @@ docker_ipv6_on() {
 
 docker_ipv6_off() {
     echo -e "${GREEN}开始关闭Docker IPv6...${RESET}"
-    check_command jq || {
+    if ! check_command jq; then
         if [ -f /etc/redhat-release ]; then
             yum install -y jq
         else
             apt install -y jq
         fi
-    }
+    fi
     local CONFIG_FILE="/etc/docker/daemon.json"
     if [ ! -f "$CONFIG_FILE" ]; then
         echo -e "${RED}Docker配置文件不存在${RESET}"
         press_any_key
         return
     fi
-    local ORIGINAL_CONFIG=$(<"$CONFIG_FILE")
+    local ORIGINAL_CONFIG=$(cat "$CONFIG_FILE")
     local UPDATED_CONFIG=$(echo "$ORIGINAL_CONFIG" | jq 'del(.["fixed-cidr-v6"]) | .ipv6 = false')
     local CURRENT_IPV6=$(echo "$ORIGINAL_CONFIG" | jq -r '.ipv6 // false')
-    if [[ "$CURRENT_IPV6" == "false" ]]; then
+    if [ "$CURRENT_IPV6" = "false" ]; then
         echo -e "${YELLOW}当前已关闭IPv6${RESET}"
     else
         echo "$UPDATED_CONFIG" | jq . > "$CONFIG_FILE"
-        systemctl restart docker
-        echo -e "${GREEN}Docker IPv6关闭成功${RESET}"
+        if systemctl restart docker; then
+            echo -e "${GREEN}Docker IPv6关闭成功${RESET}"
+        else
+            echo -e "${RED}Docker IPv6关闭失败${RESET}"
+        fi
     fi
     press_any_key
 }
@@ -665,24 +803,22 @@ system_menu() {
     while true; do
         show_banner
         echo -e "${GREEN}=== 系统设置 ==="
-        echo -e "1. 设置命令别名"
-        echo -e "2. 清理系统"
-        echo -e "3. 网络优化"
-        echo -e "4. 时区设置"
-        echo -e "5. 虚拟内存设置"
-        echo -e "6. SSH防御"
+        echo -e "1. 清理系统"
+        echo -e "2. 网络优化"
+        echo -e "3. 时区设置"
+        echo -e "4. 虚拟内存设置"
+        echo -e "5. SSH防御"
         echo -e "${BLUE}0. 返回主菜单${RESET}"
         echo -e "========================="
         
         read -p "请选择操作: " choice
         
         case $choice in
-            1) setup_alias ;;
-            2) clean_system ;;
-            3) optimize_network ;;
-            4) set_timezone ;;
-            5) set_swap ;;
-            6) ssh_defense ;;
+            1) clean_system ;;
+            2) optimize_network ;;
+            3) set_timezone ;;
+            4) set_swap ;;
+            5) ssh_defense ;;
             0) return ;;
             *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
         esac
@@ -691,17 +827,21 @@ system_menu() {
 
 setup_alias() {
     show_banner
-    echo -e "${GREEN}=== 设置命令别名 ==="
+    echo -e "${GREEN}=== 设置快捷键 ==="
     echo -e "${YELLOW}当前快捷命令: skywrt${RESET}"
     
     read -p "输入新的快捷命令 (留空保持当前): " alias_name
-    [ -z "$alias_name" ] && return
+    if [ -z "$alias_name" ]; then
+        return
+    fi
     
     echo "alias $alias_name='bash <(curl -sL ${DOMAIN})'" >> ~/.bashrc
-    source ~/.bashrc
-    
-    echo -e "${GREEN}快捷命令 $alias_name 设置成功${RESET}"
-    echo -e "现在可以使用: ${BLUE}$alias_name${RESET} 启动脚本"
+    if source ~/.bashrc; then
+        echo -e "${GREEN}快捷命令 $alias_name 设置成功${RESET}"
+        echo -e "现在可以使用: ${BLUE}$alias_name${RESET} 启动脚本"
+    else
+        echo -e "${RED}快捷命令设置失败${RESET}"
+    fi
     press_any_key
 }
 
@@ -731,8 +871,7 @@ net.ipv4.tcp_max_syn_backlog=8192
 net.ipv4.tcp_tw_reuse=1
 net.ipv4.tcp_fin_timeout=15
 EOF
-    sysctl -p /etc/sysctl.d/99-skywrt.conf
-    if [ $? -eq 0 ]; then
+    if sysctl -p /etc/sysctl.d/99-skywrt.conf; then
         echo -e "${GREEN}网络优化完成${RESET}"
     else
         echo -e "${RED}网络优化失败${RESET}"
@@ -762,8 +901,7 @@ set_timezone() {
     esac
     
     echo -e "${GREEN}设置时区为 $timezone...${RESET}"
-    timedatectl set-timezone "$timezone"
-    if [ $? -eq 0 ]; then
+    if timedatectl set-timezone "$timezone"; then
         echo -e "${GREEN}时区设置成功${RESET}"
     else
         echo -e "${RED}时区设置失败${RESET}"
@@ -777,11 +915,11 @@ set_swap() {
     local swap_total=$(free -m | awk 'NR==3{print $2}')
     echo -e "当前虚拟内存: ${YELLOW}${swap_total}MB${RESET}"
     read -p "请输入新的虚拟内存大小(MB): " swap_size
-    [ -z "$swap_size" ] && {
+    if [ -z "$swap_size" ]; then
         echo -e "${RED}请输入有效的大小${RESET}"
         press_any_key
         return
-    }
+    fi
     
     echo -e "${GREEN}开始设置虚拟内存为 ${swap_size}MB...${RESET}"
     swapoff -a
@@ -820,13 +958,21 @@ ssh_defense() {
         case $choice in
             1)
                 if check_command fail2ban-client; then
-                    fail2ban-client status sshd
+                    if fail2ban-client status sshd; then
+                        echo -e "${GREEN}SSH拦截记录显示成功${RESET}"
+                    else
+                        echo -e "${RED}无法显示SSH拦截记录${RESET}"
+                    fi
                 else
                     install_fail2ban
                 fi
                 ;;
             2)
-                tail -f /var/log/fail2ban.log
+                if [ -f /var/log/fail2ban.log ]; then
+                    tail -f /var/log/fail2ban.log
+                else
+                    echo -e "${RED}Fail2Ban日志文件不存在${RESET}"
+                fi
                 ;;
             3)
                 if [ -f /etc/redhat-release ]; then
@@ -835,7 +981,11 @@ ssh_defense() {
                     apt remove -y fail2ban
                 fi
                 rm -rf /etc/fail2ban
-                echo -e "${GREEN}Fail2Ban卸载成功${RESET}"
+                if [ $? -eq 0 ]; then
+                    echo -e "${GREEN}Fail2Ban卸载成功${RESET}"
+                else
+                    echo -e "${RED}Fail2Ban卸载失败${RESET}"
+                fi
                 ;;
             0) return ;;
             *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
@@ -864,8 +1014,7 @@ maxretry = 5
 bantime = 3600
 findtime = 600
 EOF
-    systemctl restart fail2ban
-    if [ $? -eq 0 ]; then
+    if systemctl restart fail2ban; then
         echo -e "${GREEN}Fail2Ban安装成功${RESET}"
     else
         echo -e "${RED}Fail2Ban安装失败${RESET}"
@@ -879,7 +1028,8 @@ EOF
 update_script() {
     show_banner
     echo -e "${GREEN}=== 脚本更新 ==="
-    local new_version=$(curl -s "${DOMAIN}" | grep -o 'SH_VERSION="[0-9.]*"' | cut -d '"' -f 2)
+    local new_version
+    new_version=$(curl -s "${DOMAIN}" | grep -o 'SH_VERSION="[0-9.]*"' | cut -d '"' -f 2)
     if [ -z "$new_version" ]; then
         new_version=$(curl -s "${FALLBACK_URL}" | grep -o 'SH_VERSION="[0-9.]*"' | cut -d '"' -f 2)
         if [ -z "$new_version" ]; then
