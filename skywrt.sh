@@ -73,13 +73,18 @@ check_command() {
 check_disk_space() {
     local required_gb=$1
     local required_space_mb=$((required_gb * 1024))
-    local available_space_mb=$(df -m / | awk 'NR==2 {print $4}')
+    local available_space_mb
+    available_space_mb=$(df -m / | awk 'NR==2 {print $4}' 2>/dev/null || echo 0)
+    if [ "$available_space_mb" -eq 0 ]; then
+        echo -e "${YELLOW}警告: 无法获取磁盘空间信息，跳过检查${RESET}"
+        return
+    fi
     if [ "$available_space_mb" -lt "$required_space_mb" ]; then
         echo -e "${YELLOW}警告: 磁盘空间不足！可用: $((available_space_mb/1024))G，需求: ${required_gb}G${RESET}"
         echo -e "${YELLOW}磁盘空间不足，无法继续！${RESET}"
         press_any_key
         exit 1
-    }
+    fi
 }
 
 # ========================
