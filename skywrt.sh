@@ -3,8 +3,7 @@
 # SkyWRT Linux 管理脚本
 # 使用方式: bash <(curl -sL https://sink.ysx66.com/linux)
 # 版本: 2.4
-# 说明: 支持系统换源（显示系统版本，Armbian 专用子菜单）、安装常用工具（照搬 kejilion.sh）、Docker 管理、系统设置、设置快捷键（改进别名设置）、脚本更新。
-# 已移除: 日志输出、远程统计、服务器集群控制、防火墙管理、系统备份与恢复、软件管理的卸载/更新/升级功能。
+# 说明: 支持系统换源、安装常用工具、Docker 管理、系统设置、设置快捷键、脚本更新。
 
 # ========================
 # 颜色定义
@@ -363,12 +362,12 @@ armbian_update_kernel() {
 }
 
 # ========================
-# 安装常用工具（照搬 kejilion.sh）
+# 常用工具
 # ========================
 software_menu() {
     while true; do
         show_banner
-        echo -e "${GREEN}=== 安装常用工具 ==="
+        echo -e "${GREEN}=== 常用工具 ==="
         echo -e "0. 全部安装"
         echo -e "1. curl"
         echo -e "2. wget"
