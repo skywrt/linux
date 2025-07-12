@@ -1505,19 +1505,29 @@ privacy_menu() {
 update_script() {
     show_banner
     echo -e "${GREEN}=== 脚本更新 ==="
-    local new_version=$(curl -s "${GH_PROXY}raw.githubusercontent.com/skywrt/linux/main/skywrt.sh" | grep -o 'SH_VERSION="[0-9.]*"' | cut -d '"' -f 2)
+    local new_version=$(curl -s "https://raw.githubusercontent.com/skywrt/linux/main/skywrt.sh" | grep -o 'SH_VERSION="[0-9.]*"' | cut -d '"' -f 2)
+    if [ -z "$new_version" ]; then
+        echo -e "${RED}无法获取最新版本，请检查网络或仓库地址${RESET}"
+        log "${RED}脚本更新失败：无法获取版本${RESET}"
+        press_any_key
+        return
+    fi
     if [ "$SH_VERSION" = "$new_version" ]; then
         echo -e "${YELLOW}当前已是最新版本: v$SH_VERSION${RESET}"
     else
         echo -e "当前版本: v$SH_VERSION  最新版本: ${GREEN}v$new_version${RESET}"
         read -p "是否更新到最新版本？(y/n): " confirm
         if [ "$confirm" = "y" ]; then
-            curl -sS -o /root/skywrt.sh "${GH_PROXY}raw.githubusercontent.com/skywrt/linux/main/skywrt.sh"
-            chmod +x /root/skywrt.sh
-            cp /root/skywrt.sh /usr/local/bin/skywrt
-            log "${GREEN}脚本已更新到 v$new_version${RESET}"
-            echo -e "${GREEN}脚本已更新到 v$new_version${RESET}"
-            exec /root/skywrt.sh
+            if curl -sS -o /root/skywrt.sh "https://raw.githubusercontent.com/skywrt/linux/main/skywrt.sh"; then
+                chmod +x /root/skywrt.sh
+                cp /root/skywrt.sh /usr/local/bin/skywrt
+                log "${GREEN}脚本已更新到 v$new_version${RESET}"
+                echo -e "${GREEN}脚本已更新到 v$new_version${RESET}"
+                exec /root/skywrt.sh
+            else
+                log "${RED}脚本下载失败，请检查网络${RESET}"
+                echo -e "${RED}脚本下载失败，请检查网络${RESET}"
+            fi
         fi
     fi
     press_any_key
