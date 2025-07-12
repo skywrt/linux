@@ -437,7 +437,7 @@ install_docker() {
         echo -e "${YELLOW}Docker已安装${RESET}"
         press_any_key
         return
-    }
+    fi
     
     local country=$(curl -s ipinfo.io/country || echo "unknown")
     if [ "$country" = "CN" ]; then
@@ -447,13 +447,13 @@ install_docker() {
     fi
     systemctl enable docker
     systemctl start docker
-    [ $? -eq 0 ] && {
+    if [ $? -eq 0 ]; then
         log "${GREEN}Docker安装成功${RESET}"
         echo -e "${GREEN}Docker安装成功${RESET}"
-    } || {
+    else
         log "${RED}Docker安装失败${RESET}"
         echo -e "${RED}Docker安装失败${RESET}"
-    }
+    fi
     press_any_key
 }
 
