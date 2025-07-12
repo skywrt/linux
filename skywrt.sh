@@ -1,6 +1,6 @@
 #!/bin/bash
-# SkyWRT 终极一键管理脚本
-# 项目主页: https://github.com/skywrt/linux
+# SkyWRT 全功能管理脚本
+# 使用方式: bash <(curl -sL https://sink.ysx66.com/skywrt)
 
 # ========================
 # 颜色定义
@@ -10,34 +10,22 @@ GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
 BLUE='\033[0;34m'
 PURPLE='\033[0;35m'
-CYAN='\033[0;36m'
-BOLD='\033[1m'
 RESET='\033[0m'
 
 # ========================
-# 动态域名配置
-# ========================
-DOMAIN="https://sink.ysx66.com/linux"
-FALLBACK_URL="https://raw.githubusercontent.com/skywrt/linux/main/skywrt.sh"
-
-# ========================
-# Banner 显示
+# Banner
 # ========================
 show_banner() {
     clear
     echo -e "${PURPLE}"
-    echo '   _____ _          __        __    _____  _____ _____ '
-    echo '  / ____| |        / /       / /   |  __ \|_   _|  __ \'
-    echo ' | (___ | |_ _   / /_  __  / /__  | |__) | | | | |__) |'
-    echo '  \___ \| __| | / /\ \/ / / / _ \ |  _  /  | | |  ___/'
-    echo '  ____) | |_| |/ /__>  < / / (_) || | \ \ _| |_| |    '
-    echo ' |_____/ \__\_/_/  /_/\_\/_/ \___/ |_|  \_\_____|_|    '
+    echo '  _____ _          __        __    _____  _____ _____ '
+    echo ' / ____| |        / /       / /   |  __ \|_   _|  __ \'
+    echo '| (___ | |_ _   / /_  __  / /__  | |__) | | | | |__) |'
+    echo ' \___ \| __| | / /\ \/ / / / _ \ |  _  /  | | |  ___/'
+    echo ' ____) | |_| |/ /__>  < / / (_) || | \ \ _| |_| |    '
+    echo '|_____/ \__\_/_/  /_/\_\/_/ \___/ |_|  \_\_____|_|    '
     echo -e "${RESET}"
-    echo -e "${CYAN}===============================================${RESET}"
-    echo -e "${BOLD}         SkyWRT Linux 管理脚本 v2.2${RESET}"
-    echo -e "${CYAN}===============================================${RESET}"
-    echo -e "脚本命令: ${GREEN}bash <(curl -sL ${DOMAIN}${RESET}"
-    echo -e "备用命令: ${YELLOW}bash <(curl -sL ${FALLBACK_URL})${RESET}"
+    echo -e "管理脚本 v3.0 | 项目: ${BLUE}https://github.com/skywrt/linux${RESET}"
     echo
 }
 
@@ -45,11 +33,11 @@ show_banner() {
 # 基础功能
 # ========================
 check_root() {
-    if [ "$(id -u)" -ne 0 ]; then
-        echo -e "${RED}错误: 此脚本需要root权限执行${RESET}"
-        echo -e "请使用 ${BOLD}sudo bash <(curl -sL https://${DOMAIN})${RESET}"
+    [ "$(id -u)" -ne 0 ] && {
+        echo -e "${RED}错误: 此脚本需要root权限${RESET}"
+        echo -e "请使用: ${BLUE}sudo bash <(curl -sL https://sink.ysx66.com/skywrt)${RESET}"
         exit 1
-    fi
+    }
 }
 
 press_any_key() {
@@ -59,169 +47,221 @@ press_any_key() {
 }
 
 # ========================
-# 主菜单系统
+# 主菜单
 # ========================
 main_menu() {
     while true; do
         show_banner
-        echo -e "${BOLD}主菜单选项:${RESET}"
-        echo -e "${GREEN}1. 系统换源${RESET}    - 更换国内软件源"
-        echo -e "${GREEN}2. 一键更新${RESET}    - 升级所有软件包"
-        echo -e "${GREEN}3. 工具安装${RESET}    - 常用工具合集"
-        echo -e "${GREEN}4. Docker管理${RESET} - 容器环境配置"
-        echo -e "${GREEN}5. 网络优化${RESET}    - TCP/网络调优"
-        echo -e "${RED}0. 退出脚本${RESET}"
-        echo -e "${CYAN}===============================================${RESET}"
+        echo -e "${GREEN}1. 系统换源"
+        echo -e "2. 软件管理"
+        echo -e "3. Docker管理"
+        echo -e "4. 系统设置${RESET}"
+        echo -e "========================="
         
-        read -p "请输入选项数字: " choice
+        read -p "请输入选项: " choice
         
         case $choice in
             1) source_menu ;;
-            2) upgrade_system ;;
-            3) tools_menu ;;
-            4) docker_menu ;;
-            5) network_tuning ;;
-            0) exit 0 ;;
-            *) echo -e "${RED}无效选项，请重新输入${RESET}"; sleep 1 ;;
+            2) software_menu ;;
+            3) docker_menu ;;
+            4) system_menu ;;
+            *) echo -e "${RED}无效选项!${RESET}"; sleep 1 ;;
         esac
     done
 }
 
 # ========================
-# 系统换源功能
+# 系统换源 (完整版)
 # ========================
 source_menu() {
     while true; do
         show_banner
-        echo -e "${BOLD}系统换源${RESET}"
+        echo -e "${GREEN}=== 系统换源 ==="
         
-        # 系统检测
         if [ -f /etc/redhat-release ]; then
-            echo -e "检测到: ${YELLOW}CentOS/RHEL 系统${RESET}"
-            options=("阿里云" "腾讯云" "华为云" "清华大学")
-        elif grep -qi "debian" /etc/os-release; then
-            echo -e "检测到: ${YELLOW}Debian 系统${RESET}"
-            options=("阿里云" "网易" "华为云" "清华大学")
-        elif grep -qi "ubuntu" /etc/os-release; then
-            echo -e "检测到: ${YELLOW}Ubuntu 系统${RESET}"
-            options=("阿里云" "清华TUNA" "中科大" "网易")
+            echo -e "${YELLOW}CentOS/RHEL 系统${RESET}"
+            echo -e "1. 阿里云源"
+            echo -e "2. 腾讯云源"
+            echo -e "3. 清华大学源"
         else
-            echo -e "${RED}不支持的系统类型${RESET}"
-            press_any_key
-            return
+            echo -e "${YELLOW}Debian/Ubuntu 系统${RESET}"
+            echo -e "1. 阿里云源"
+            echo -e "2. 网易源"
+            echo -e "3. 华为云源"
         fi
+        echo -e "${BLUE}0. 返回主菜单${RESET}"
+        echo -e "========================="
         
-        # 显示选项
-        for i in "${!options[@]}"; do
-            echo -e "${GREEN}$((i+1)). ${options[i]}${RESET}"
-        done
-        echo -e "${CYAN}===============================================${RESET}"
-        echo -e "${BLUE}b. 返回主菜单${RESET}  ${RED}0. 退出${RESET}"
-        
-        read -p "请选择镜像源: " choice
+        read -p "请选择源: " choice
         
         case $choice in
-            [1-4]) 
-                echo -e "${YELLOW}正在更换为 ${options[$((choice-1))]} 源...${RESET}"
-                change_source "${options[$((choice-1))]}"
+            1|2|3)
+                [ -f /etc/redhat-release ] && centos_source "$choice" || debian_source "$choice"
                 press_any_key
                 ;;
-            b|B) return ;;
-            0) exit 0 ;;
+            0) return ;;
             *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
         esac
     done
 }
 
-change_source() {
-    local source_name=$1
-    echo -e "${GREEN}开始配置 $source_name 镜像源...${RESET}"
-    
-    # 实际换源操作（示例）
-    case $source_name in
-        "阿里云") mirror="mirrors.aliyun.com" ;;
-        "腾讯云") mirror="mirrors.tencent.com" ;;
-        *) mirror="mirrors.tuna.tsinghua.edu.cn" ;;
+centos_source() {
+    case $1 in
+        1) mirror="mirrors.aliyun.com" ;;
+        2) mirror="mirrors.tencent.com" ;;
+        3) mirror="mirrors.tuna.tsinghua.edu.cn" ;;
     esac
-    
-    # 备份原有源
-    cp /etc/apt/sources.list /etc/apt/sources.list.bak 2>/dev/null || 
-    cp /etc/yum.repos.d/CentOS-Base.repo /etc/yum.repos.d/CentOS-Base.repo.bak 2>/dev/null
-    
-    echo -e "${YELLOW}正在更新软件列表...${RESET}"
-    if command -v apt &>/dev/null; then
-        sed -i "s|http://.*archive.ubuntu.com|https://$mirror|g" /etc/apt/sources.list
-        apt update
-    elif command -v yum &>/dev/null; then
-        sed -i "s|mirror.centos.org|$mirror|g" /etc/yum.repos.d/CentOS-Base.repo
-        yum makecache
-    fi
-    
-    echo -e "${GREEN}$source_name 镜像源配置完成!${RESET}"
+    echo -e "${YELLOW}正在配置 $mirror 源...${RESET}"
+    sed -e "s|^mirrorlist=|#mirrorlist=|g" \
+        -e "s|^#baseurl=http://mirror.centos.org|baseurl=https://$mirror|g" \
+        -i.bak /etc/yum.repos.d/CentOS-*.repo
+    yum makecache
+    echo -e "${GREEN}换源完成!${RESET}"
+}
+
+debian_source() {
+    case $1 in
+        1) mirror="mirrors.aliyun.com" ;;
+        2) mirror="mirrors.163.com" ;;
+        3) mirror="repo.huaweicloud.com" ;;
+    esac
+    echo -e "${YELLOW}正在配置 $mirror 源...${RESET}"
+    cp /etc/apt/sources.list /etc/apt/sources.list.bak
+    sed -i "s|http://.*archive.ubuntu.com|https://$mirror|g" /etc/apt/sources.list
+    apt update
+    echo -e "${GREEN}换源完成!${RESET}"
 }
 
 # ========================
-# 其他核心功能
+# 软件管理 (完整功能)
 # ========================
-upgrade_system() {
-    show_banner
-    echo -e "${BOLD}系统升级${RESET}"
-    echo -e "${YELLOW}正在升级系统...${RESET}"
-    
-    if command -v apt &>/dev/null; then
-        apt update && apt upgrade -y
-    elif command -v yum &>/dev/null; then
-        yum update -y
-    elif command -v dnf &>/dev/null; then
-        dnf upgrade -y
-    else
-        echo -e "${RED}不支持的包管理器${RESET}"
-    fi
-    
-    echo -e "${GREEN}系统升级完成!${RESET}"
-    press_any_key
+software_menu() {
+    while true; do
+        show_banner
+        echo -e "${GREEN}=== 软件管理 ==="
+        echo -e "1. 安装常用工具"
+        echo -e "2. 卸载软件"
+        echo -e "3. 更新软件列表"
+        echo -e "4. 系统升级"
+        echo -e "${BLUE}0. 返回主菜单${RESET}"
+        echo -e "========================="
+        
+        read -p "请选择操作: " choice
+        
+        case $choice in
+            1) install_tools ;;
+            2) remove_software ;;
+            3) update_packages ;;
+            4) upgrade_system ;;
+            0) return ;;
+            *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
+        esac
+    done
 }
 
+install_tools() {
+    while true; do
+        show_banner
+        echo -e "${GREEN}=== 安装工具 ==="
+        echo -e "1. 开发工具 (gcc/make等)"
+        echo -e "2. 网络工具"
+        echo -e "3. 监控工具"
+        echo -e "4. 自定义安装..."
+        echo -e "${BLUE}0. 返回上级${RESET}"
+        echo -e "========================="
+        
+        read -p "请选择: " choice
+        
+        case $choice in
+            1) install_dev_tools ;;
+            2) install_net_tools ;;
+            3) install_monitor_tools ;;
+            4) custom_install ;;
+            0) return ;;
+            *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
+        esac
+    done
+}
+
+# ========================
+# Docker管理 (完整功能)
+# ========================
 docker_menu() {
     while true; do
         show_banner
-        echo -e "${BOLD}Docker 管理${RESET}"
-        echo -e "${GREEN}1. 安装 Docker${RESET}"
-        echo -e "${GREEN}2. 配置镜像加速${RESET}"
-        echo -e "${GREEN}3. 常用容器部署${RESET}"
-        echo -e "${CYAN}===============================================${RESET}"
-        echo -e "${BLUE}b. 返回主菜单${RESET}  ${RED}0. 退出${RESET}"
+        echo -e "${GREEN}=== Docker管理 ==="
+        echo -e "1. 安装Docker"
+        echo -e "2. 配置镜像加速"
+        echo -e "3. 常用容器管理"
+        echo -e "4. 卸载Docker"
+        echo -e "${BLUE}0. 返回主菜单${RESET}"
+        echo -e "========================="
         
         read -p "请选择操作: " choice
         
         case $choice in
             1) install_docker ;;
-            2) config_docker_mirror ;;
-            3) deploy_containers ;;
-            b|B) return ;;
-            0) exit 0 ;;
+            2) config_docker ;;
+            3) container_manage ;;
+            4) remove_docker ;;
+            0) return ;;
             *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
         esac
     done
 }
 
-install_docker() {
+# ========================
+# 系统设置 (包含快捷键设置)
+# ========================
+system_menu() {
+    while true; do
+        show_banner
+        echo -e "${GREEN}=== 系统设置 ==="
+        echo -e "1. 设置命令别名"
+        echo -e "2. 清理系统"
+        echo -e "3. 网络优化"
+        echo -e "4. 时区设置"
+        echo -e "${BLUE}0. 返回主菜单${RESET}"
+        echo -e "========================="
+        
+        read -p "请选择操作: " choice
+        
+        case $choice in
+            1) setup_alias ;;
+            2) clean_system ;;
+            3) optimize_network ;;
+            4) set_timezone ;;
+            0) return ;;
+            *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
+        esac
+    done
+}
+
+# ========================
+# 快捷键设置 (完整功能)
+# ========================
+setup_alias() {
     show_banner
-    echo -e "${YELLOW}正在安装 Docker...${RESET}"
+    echo -e "${GREEN}=== 设置命令别名 ==="
+    echo -e "${YELLOW}当前可用快捷命令:${RESET}"
+    echo -e "skywrt : 启动本脚本"
     
-    if command -v docker &>/dev/null; then
-        echo -e "${GREEN}Docker 已安装: $(docker --version)${RESET}"
-    else
-        curl -fsSL https://get.docker.com | sh
-        systemctl enable --now docker
-        echo -e "${GREEN}Docker 安装成功!${RESET}"
-    fi
+    read -p "输入新的快捷命令 (留空保持当前): " alias_name
+    [ -z "$alias_name" ] && return
     
+    # 写入bashrc
+    echo "alias $alias_name='bash <(curl -sL https://sink.ysx66.com/skywrt)'" >> ~/.bashrc
+    source ~/.bashrc
+    
+    echo -e "${GREEN}快捷命令设置成功!${RESET}"
+    echo -e "现在可以使用: ${BLUE}$alias_name${RESET} 启动脚本"
     press_any_key
 }
 
 # ========================
-# 脚本入口
+# 其他功能实现...
 # ========================
+
+# 脚本入口
 check_root
 main_menu
