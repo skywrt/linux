@@ -3,7 +3,7 @@
 # SkyWRT Linux 管理脚本
 # 使用方式: bash <(curl -sL https://sink.ysx66.com/linux)
 # 版本: 2.4
-# 说明: 支持系统换源、安装常用工具、Docker 管理、系统设置、设置快捷键、脚本更新。
+# 说明: 支持系统换源、常用工具、Docker 管理、系统设置、设置快捷键、脚本更新。
 
 # ========================
 # 颜色定义
@@ -106,7 +106,7 @@ main_menu() {
     while true; do
         show_banner
         echo -e "${GREEN}1. 系统换源"
-        echo -e "2. 安装常用工具"
+        echo -e "2. 常用工具"
         echo -e "3. Docker管理"
         echo -e "4. 系统设置"
         echo -e "5. 设置快捷键"
