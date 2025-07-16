@@ -1,5 +1,3 @@
-
-```bash
 #!/bin/bash
 # SkyWRT Linux 管理脚本
 # 使用方式: bash <(curl -sL https://sink.ysx66.com/linux)
@@ -1107,4 +1105,3 @@ update_script() {
 # ========================
 check_root
 main_menu
-```
