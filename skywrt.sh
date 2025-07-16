@@ -1,8 +1,8 @@
 #!/bin/bash
 # SkyWRT Linux 管理脚本
-# 使用方式: bash <(curl -sL https://sink.ysx66.com/linux)
-# 版本: 2.4
-# 说明: 支持系统换源（显示系统版本，Armbian 专用子菜单）、安装常用工具（照搬 kejilion.sh）、Docker 管理、系统设置、设置快捷键（改进别名设置）、脚本更新。
+# 使用方式: bash <(curl -fsSL https://sink.ysx66.com/linux)
+# 版本: 2.4.1
+# 说明: 支持系统换源、安装常用工具、Docker管理、系统设置、快捷键设置和脚本更新
 
 # ========================
 # 颜色定义
@@ -25,7 +25,7 @@ FALLBACK_URL="https://raw.githubusercontent.com/skywrt/linux/main/skywrt.sh"
 # ========================
 # 全局变量
 # ========================
-SH_VERSION="2.4"
+SH_VERSION="2.4.1"
 
 # ========================
 # Banner 显示
@@ -43,8 +43,8 @@ show_banner() {
     echo -e "${CYAN}===============================================${RESET}"
     echo -e "${BOLD}         SkyWRT Linux 管理脚本 v${SH_VERSION}${RESET}"
     echo -e "${CYAN}===============================================${RESET}"
-    echo -e "脚本命令: ${GREEN}bash <(curl -sL ${DOMAIN})${RESET}"
-    echo -e "备用命令: ${YELLOW}bash <(curl -sL ${FALLBACK_URL})${RESET}"
+    echo -e "脚本命令: ${GREEN}bash <(curl -fsSL ${DOMAIN})${RESET}"
+    echo -e "备用命令: ${YELLOW}bash <(curl -fsSL ${FALLBACK_URL})${RESET}"
     echo
 }
 
@@ -54,7 +54,7 @@ show_banner() {
 check_root() {
     if [ "$(id -u)" -ne 0 ]; then
         echo -e "${RED}错误: 此脚本需要root权限${RESET}"
-        echo -e "请使用: ${BLUE}bash <(curl -sL ${DOMAIN})${RESET}"
+        echo -e "请使用: ${BLUE}bash <(curl -fsSL ${DOMAIN})${RESET}"
         exit 1
     fi
 }
@@ -113,9 +113,9 @@ main_menu() {
         echo -e "${BLUE}0. 退出${RESET}"
         echo -e "========================="
         
-        read -p "请输入选项: " choice
+        read -rp "请输入选项: " choice
         
-        case $choice in
+        case "$choice" in
             1) source_menu ;;
             2) software_menu ;;
             3) docker_menu ;;
@@ -136,36 +136,44 @@ source_menu() {
         show_banner
         echo -e "${GREEN}=== 系统换源 ==="
         get_system_version
+        
         if [ -f /etc/redhat-release ]; then
             echo -e "1. 阿里云源"
             echo -e "2. 腾讯云源"
             echo -e "3. 清华大学源"
-        elif [ -f /etc/armbian-release ]; then
-            echo -e "1. Armbian 换源"
-        else
-            echo -e "1. 阿里云源"
-            echo -e "2. 网易源"
-            echo -e "3. 华为云源"
-        fi
-        echo -e "${BLUE}0. 返回主菜单${RESET}"
-        echo -e "========================="
-        
-        read -p "请选择源: " choice
-        
-        if [ -f /etc/redhat-release ]; then
-            case $choice in
+            echo -e "${BLUE}0. 返回主菜单${RESET}"
+            echo -e "========================="
+            
+            read -rp "请选择源: " choice
+            
+            case "$choice" in
                 1|2|3) centos_source "$choice"; press_any_key ;;
                 0) return ;;
                 *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
             esac
         elif [ -f /etc/armbian-release ]; then
-            case $choice in
+            echo -e "1. Armbian 换源"
+            echo -e "${BLUE}0. 返回主菜单${RESET}"
+            echo -e "========================="
+            
+            read -rp "请选择操作: " choice
+            
+            case "$choice" in
                 1) armbian_source_menu ;;
                 0) return ;;
                 *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
             esac
         else
-            case $choice in
+            # 默认处理Debian/Ubuntu等系统
+            echo -e "1. 阿里云源"
+            echo -e "2. 网易源"
+            echo -e "3. 华为云源"
+            echo -e "${BLUE}0. 返回主菜单${RESET}"
+            echo -e "========================="
+            
+            read -rp "请选择源: " choice
+            
+            case "$choice" in
                 1|2|3) debian_source "$choice"; press_any_key ;;
                 0) return ;;
                 *) echo -e "${RED}无效选择!${RESET}"; sleep 1 ;;
@@ -176,7 +184,7 @@ source_menu() {
 
 centos_source() {
     local mirror
-    case $1 in
+    case "$1" in
         1) mirror="mirrors.aliyun.com" ;;
         2) mirror="mirrors.tencent.com" ;;
         3) mirror="mirrors.tuna.tsinghua.edu.cn" ;;
@@ -188,21 +196,33 @@ centos_source() {
         return 1
     fi
     
-    mkdir -p /etc/yum.repos.d/backup
-    cp /etc/yum.repos.d/*.repo /etc/yum.repos.d/backup/ 2>/dev/null
-    sed -e "s|^mirrorlist=|#mirrorlist=|g" \
-        -e "s|^#baseurl=http://mirror.centos.org|baseurl=https://$mirror|g" \
-        -i.bak /etc/yum.repos.d/CentOS-*.repo
+    if ! mkdir -p /etc/yum.repos.d/backup; then
+        echo -e "${RED}无法创建备份目录${RESET}"
+        return 1
+    fi
+    
+    if ! cp /etc/yum.repos.d/*.repo /etc/yum.repos.d/backup/ 2>/dev/null; then
+        echo -e "${YELLOW}警告: 无法备份现有repo文件${RESET}"
+    fi
+    
+    if ! sed -e "s|^mirrorlist=|#mirrorlist=|g" \
+             -e "s|^#baseurl=http://mirror.centos.org|baseurl=https://$mirror|g" \
+             -i.bak /etc/yum.repos.d/CentOS-*.repo; then
+        echo -e "${RED}替换源失败${RESET}"
+        return 1
+    fi
+    
     if yum makecache; then
         echo -e "${GREEN}换源完成!${RESET}"
     else
         echo -e "${RED}换源失败!${RESET}"
+        return 1
     fi
 }
 
 debian_source() {
     local mirror
-    case $1 in
+    case "$1" in
         1) mirror="mirrors.aliyun.com" ;;
         2) mirror="mirrors.163.com" ;;
         3) mirror="repo.huaweicloud.com" ;;
@@ -214,12 +234,21 @@ debian_source() {
         return 1
     fi
     
-    cp /etc/apt/sources.list /etc/apt/sources.list.bak
-    sed -i "s|http://.*archive.ubuntu.com|https://$mirror|g" /etc/apt/sources.list
+    if ! cp /etc/apt/sources.list /etc/apt/sources.list.bak; then
+        echo -e "${RED}无法备份现有源文件${RESET}"
+        return 1
+    fi
+    
+    if ! sed -i "s|http://.*archive.ubuntu.com|https://$mirror|g" /etc/apt/sources.list; then
+        echo -e "${RED}替换源失败${RESET}"
+        return 1
+    fi
+    
     if apt update; then
         echo -e "${GREEN}换源完成!${RESET}"
     else
         echo -e "${RED}换源失败!${RESET}"
+        return 1
     fi
 }
 
@@ -1068,35 +1097,58 @@ update_script() {
     show_banner
     echo -e "${GREEN}=== 脚本更新 ==="
     local new_version
-    new_version=$(curl -s "${DOMAIN}" | grep -o 'SH_VERSION="[0-9.]*"' | cut -d '"' -f 2)
-    if [ -z "$new_version" ]; then
-        new_version=$(curl -s "${FALLBACK_URL}" | grep -o 'SH_VERSION="[0-9.]*"' | cut -d '"' -f 2)
-        if [ -z "$new_version" ]; then
+    local update_url
+    
+    # 尝试从主域名获取版本
+    if ! new_version=$(curl -fsSL "${DOMAIN}" | grep -o 'SH_VERSION="[0-9.]*"' | cut -d '"' -f 2); then
+        echo -e "${YELLOW}无法从主域名获取版本，尝试备用源${RESET}"
+        if ! new_version=$(curl -fsSL "${FALLBACK_URL}" | grep -o 'SH_VERSION="[0-9.]*"' | cut -d '"' -f 2); then
             echo -e "${RED}无法获取最新版本，请检查网络${RESET}"
             press_any_key
-            return
+            return 1
         fi
         update_url="${FALLBACK_URL}"
     else
         update_url="${DOMAIN}"
     fi
+
     if [ "$SH_VERSION" = "$new_version" ]; then
         echo -e "${YELLOW}当前已是最新版本: v$SH_VERSION${RESET}"
-    else
-        echo -e "当前版本: v$SH_VERSION  最新版本: ${GREEN}v$new_version${RESET}"
-        read -p "是否更新到最新版本？(y/n): " confirm
-        if [ "$confirm" = "y" ]; then
-            if curl -sS -o /root/skywrt.sh "$update_url"; then
-                chmod +x /root/skywrt.sh
-                cp /root/skywrt.sh /usr/local/bin/skywrt
-                echo -e "${GREEN}脚本已更新到 v$new_version${RESET}"
-                exec /root/skywrt.sh
-            else
-                echo -e "${RED}脚本下载失败，请检查网络${RESET}"
-            fi
-        fi
+        press_any_key
+        return
     fi
+
+    echo -e "当前版本: v$SH_VERSION  最新版本: ${GREEN}v$new_version${RESET}"
+    read -rp "是否更新到最新版本？(y/n): " confirm
+    if [ "$confirm" != "y" ]; then
+        echo -e "${YELLOW}已取消更新${RESET}"
+        press_any_key
+        return
+    fi
+
+    echo -e "${GREEN}开始下载最新版本...${RESET}"
+    if ! curl -fsSL -o /tmp/skywrt.sh "$update_url"; then
+        echo -e "${RED}下载失败，请检查网络${RESET}"
+        press_any_key
+        return 1
+    fi
+
+    if ! chmod +x /tmp/skywrt.sh; then
+        echo -e "${RED}无法设置执行权限${RESET}"
+        press_any_key
+        return 1
+    fi
+
+    if ! mv /tmp/skywrt.sh /usr/local/bin/skywrt; then
+        echo -e "${RED}无法移动文件到目标位置${RESET}"
+        press_any_key
+        return 1
+    fi
+
+    echo -e "${GREEN}脚本已成功更新到 v$new_version${RESET}"
+    echo -e "请运行以下命令启动新版本: ${GREEN}skywrt${RESET}"
     press_any_key
+    exec skywrt
 }
 
 # ========================
