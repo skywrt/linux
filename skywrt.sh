@@ -2,7 +2,7 @@
 # SkyWRT Linux 管理脚本
 # 使用方式: bash <(curl -fsSL https://sink.ysx66.com/linux)
 # 版本: 2.4.1
-# 说明: 支持系统换源、安装常用工具、Docker管理、系统设置、快捷键设置和脚本更新
+# 说明: 支持系统换源、安装常用工具、Docker管理、快捷键设置和脚本更新
 
 # ========================
 # 颜色定义
@@ -26,7 +26,6 @@ FALLBACK_URL="https://raw.githubusercontent.com/skywrt/linux/main/skywrt.sh"
 # 全局变量
 # ========================
 SH_VERSION="2.4.1"
-PERMISSION_GRANTED="false"
 ENABLE_STATS="true"
 
 # ========================
@@ -34,12 +33,20 @@ ENABLE_STATS="true"
 # ========================
 show_banner() {
     clear
-    echo -e "${CYAN}=============================================${RESET}"
-    echo -e "${CYAN}        SkyWRT Linux 管理脚本 v$SH_VERSION        ${RESET}"
-    echo -e "${CYAN}=============================================${RESET}"
-    echo -e "${YELLOW}使用方式: bash <(curl -fsSL $DOMAIN)${RESET}"
-    echo -e "${YELLOW}支持: 系统换源 | 工具安装 | Docker管理 | 脚本更新${RESET}"
-    echo ""
+    echo -e "${PURPLE}"
+    echo '   _____ _          __        __    _____  _____ _____ '
+    echo '  / ____| |        / /       / /   |  __ \|_   _|  __ \'
+    echo ' | (___ | |_ _   / /_  __  / /__  | |__) | | | | |__) |'
+    echo '  \___ \| __| | / /\ \/ / / / _ \ |  _  /  | | |  ___/'
+    echo '  ____) | |_| |/ /__>  < / / (_) || | \ \ _| |_| |    '
+    echo ' |_____/ \__\_/_/  /_/\_\/_/ \___/ |_|  \_\_____|_|    '
+    echo -e "${RESET}"
+    echo -e "${CYAN}===============================================${RESET}"
+    echo -e "${BOLD}         SkyWRT Linux 管理脚本 v${SH_VERSION}${RESET}"
+    echo -e "${CYAN}===============================================${RESET}"
+    echo -e "脚本命令: ${GREEN}bash <(curl -fsSL ${DOMAIN})${RESET}"
+    echo -e "备用命令: ${YELLOW}bash <(curl -fsSL ${FALLBACK_URL})${RESET}"
+    echo
 }
 
 # ========================
@@ -70,39 +77,6 @@ send_stats() {
             -d "{\"action\":\"$1\",\"timestamp\":\"$(date -u '+%Y-%m-%d %H:%M:%S')\",\"country\":\"$country\",\"os_info\":\"$os_info\",\"cpu_arch\":\"$cpu_arch\",\"version\":\"$SH_VERSION\"}" \
             &>/dev/null
     ) &
-}
-
-# ========================
-# 用户许可协议
-# ========================
-UserLicenseAgreement() {
-    clear
-    echo -e "${CYAN}欢迎使用 SkyWRT Linux 管理脚本${RESET}"
-    echo "首次使用脚本，请先阅读并同意用户许可协议。"
-    echo "用户许可协议: https://skywrt.pro/user-license-agreement/"
-    echo -e "----------------------"
-    read -r -p "是否同意以上条款？(y/n): " user_input
-
-    if [ "$user_input" = "y" ] || [ "$user_input" = "Y" ]; then
-        send_stats "许可同意"
-        sed -i 's/^PERMISSION_GRANTED="false"/PERMISSION_GRANTED="true"/' ~/skywrt.sh 2>/dev/null
-        if [ -f /usr/local/bin/sw ]; then
-            sed -i 's/^PERMISSION_GRANTED="false"/PERMISSION_GRANTED="true"/' /usr/local/bin/sw 2>/dev/null
-        fi
-    else
-        send_stats "许可拒绝"
-        clear
-        exit
-    fi
-}
-
-# ========================
-# 检查首次运行
-# ========================
-CheckFirstRun() {
-    if [ ! -f /usr/local/bin/sw ] || grep -q '^PERMISSION_GRANTED="false"' /usr/local/bin/sw 2>/dev/null; then
-        UserLicenseAgreement
-    fi
 }
 
 # ========================
@@ -491,6 +465,61 @@ docker_manage() {
 }
 
 # ========================
+# 快捷键设置
+# ========================
+set_shortcuts() {
+    clear
+    send_stats "快捷键设置"
+    echo -e "${CYAN}快捷键设置${RESET}"
+    echo "------------------------"
+    echo "1. 设置 Bash 快捷键 (如 ll, la)"
+    echo "2. 设置自定义快捷键"
+    echo "------------------------"
+    echo "0. 返回主菜单"
+    echo "------------------------"
+    read -e -p "请输入你的选择: " shortcut_choice
+
+    case $shortcut_choice in
+        1)
+            echo -e "${YELLOW}设置 Bash 常用快捷键...${RESET}"
+            if [ ! -f ~/.bashrc ]; then
+                touch ~/.bashrc
+            fi
+            cat >> ~/.bashrc << EOF
+# SkyWRT 自定义快捷键
+alias ll='ls -l'
+alias la='ls -a'
+alias lla='ls -la'
+alias cls='clear'
+EOF
+            source ~/.bashrc
+            echo -e "${GREEN}已设置 Bash 快捷键（ll, la, lla, cls）${RESET}"
+            send_stats "设置 Bash 快捷键"
+            break_end
+            ;;
+        2)
+            echo -e "${YELLOW}请输入自定义快捷键（格式：alias 别名='命令'）${RESET}"
+            read -e -p "例如：alias gs='git status': " custom_alias
+            if [ -n "$custom_alias" ]; then
+                echo "$custom_alias" >> ~/.bashrc
+                source ~/.bashrc
+                echo -e "${GREEN}已添加自定义快捷键${RESET}"
+                send_stats "设置自定义快捷键"
+            else
+                echo -e "${RED}未输入有效快捷键${RESET}"
+            fi
+            break_end
+            ;;
+        0)
+            return
+            ;;
+        *)
+            echo -e "${RED}无效的选择!${RESET}"
+            ;;
+    esac
+}
+
+# ========================
 # 脚本更新
 # ========================
 update_script() {
@@ -542,7 +571,8 @@ main_menu() {
         echo "1. 系统换源"
         echo "2. 安装常用工具"
         echo "3. Docker 管理"
-        echo "4. 脚本更新"
+        echo "4. 快捷键设置"
+        echo "5. 脚本更新"
         echo "------------------------"
         echo "0. 退出脚本"
         echo "------------------------"
@@ -559,6 +589,9 @@ main_menu() {
                 docker_manage
                 ;;
             4)
+                set_shortcuts
+                ;;
+            5)
                 update_script
                 ;;
             0)
@@ -577,7 +610,6 @@ main_menu() {
 # 快捷命令处理
 # ========================
 if [ "$#" -eq 0 ]; then
-    CheckFirstRun
     cp -f ~/skywrt.sh /usr/local/bin/sw > /dev/null 2>&1
     main_menu
 else
