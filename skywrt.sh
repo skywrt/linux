@@ -30,6 +30,19 @@ PERMISSION_GRANTED="false"
 ENABLE_STATS="true"
 
 # ========================
+# Banner 显示
+# ========================
+show_banner() {
+    clear
+    echo -e "${CYAN}=============================================${RESET}"
+    echo -e "${CYAN}        SkyWRT Linux 管理脚本 v$SH_VERSION        ${RESET}"
+    echo -e "${CYAN}=============================================${RESET}"
+    echo -e "${YELLOW}使用方式: bash <(curl -fsSL $DOMAIN)${RESET}"
+    echo -e "${YELLOW}支持: 系统换源 | 工具安装 | Docker管理 | 脚本更新${RESET}"
+    echo ""
+}
+
+# ========================
 # 检查 root 权限
 # ========================
 root_use() {
@@ -72,8 +85,10 @@ UserLicenseAgreement() {
 
     if [ "$user_input" = "y" ] || [ "$user_input" = "Y" ]; then
         send_stats "许可同意"
-        sed -i 's/^PERMISSION_GRANTED="false"/PERMISSION_GRANTED="true"/' ~/skywrt.sh
-        sed -i 's/^PERMISSION_GRANTED="false"/PERMISSION_GRANTED="true"/' /usr/local/bin/sw
+        sed -i 's/^PERMISSION_GRANTED="false"/PERMISSION_GRANTED="true"/' ~/skywrt.sh 2>/dev/null
+        if [ -f /usr/local/bin/sw ]; then
+            sed -i 's/^PERMISSION_GRANTED="false"/PERMISSION_GRANTED="true"/' /usr/local/bin/sw 2>/dev/null
+        fi
     else
         send_stats "许可拒绝"
         clear
@@ -85,7 +100,7 @@ UserLicenseAgreement() {
 # 检查首次运行
 # ========================
 CheckFirstRun() {
-    if [ ! -f /usr/local/bin/sw ] || grep -q '^PERMISSION_GRANTED="false"' /usr/local/bin/sw > /dev/null 2>&1; then
+    if [ ! -f /usr/local/bin/sw ] || grep -q '^PERMISSION_GRANTED="false"' /usr/local/bin/sw 2>/dev/null; then
         UserLicenseAgreement
     fi
 }
@@ -242,8 +257,17 @@ EOF
                         cat > /etc/apt/sources.list << EOF
 deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ $VERSION_CODENAME main restricted universe multiverse
 deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ $VERSION_CODENAME-updates main restricted universe multiverse
-deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ $VERSION_CODter
-            echo -e "${GREEN}已切换到清华大学 Ubuntu 源${RESET}"
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ $VERSION_CODENAME-backports main restricted universe multiverse
+deb https://mirrors.tuna.tsinghua.edu.cn/ubuntu/ $VERSION_CODENAME-security main restricted universe multiverse
+EOF
+                        apt update
+                        echo -e "${GREEN}已切换到清华大学 Ubuntu 源${RESET}"
+                        ;;
+                    *)
+                        echo -e "${RED}清华大学源仅支持 Ubuntu${RESET}"
+                        ;;
+                esac
+            fi
             ;;
         4)
             echo -e "${YELLOW}切换到 Ubuntu 默认源...${RESET}"
