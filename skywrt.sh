@@ -468,13 +468,13 @@ docker_manage() {
 # 快捷键设置
 # ========================
 set_shortcuts() {
+    root_use
     clear
     send_stats "快捷键设置"
     echo -e "${CYAN}快捷键设置${RESET}"
     echo "------------------------"
-    echo "1. 设置 Bash 常用快捷键 (s, ll, la, lla, cls)"
-    echo "2. 设置自定义快捷键"
-    echo "3. 编辑 .bashrc 文件"
+    echo "1. 设置脚本快捷键 (s)"
+    echo "2. 编辑 .bashrc 文件"
     echo "------------------------"
     echo "0. 返回主菜单"
     echo "------------------------"
@@ -482,43 +482,29 @@ set_shortcuts() {
 
     case $shortcut_choice in
         1)
-            echo -e "${YELLOW}设置 Bash 常用快捷键...${RESET}"
-            if [ ! -f ~/.bashrc ]; then
-                touch ~/.bashrc
+            echo -e "${YELLOW}设置脚本快捷键 s...${RESET}"
+            cp -f "$0" /root/skywrt.sh > /dev/null 2>&1
+            chmod +x /root/skywrt.sh > /dev/null 2>&1
+            if [ ! -f /root/.bashrc ]; then
+                touch /root/.bashrc
             fi
-            cat >> ~/.bashrc << EOF
-# SkyWRT 自定义快捷键
-alias s='bash /usr/local/bin/sw'
-alias ll='ls -l'
-alias la='ls -a'
-alias lla='ls -la'
-alias cls='clear'
-EOF
-            source ~/.bashrc
-            echo -e "${GREEN}已设置 Bash 快捷键（s, ll, la, lla, cls）${RESET}"
-            send_stats "设置 Bash 快捷键"
+            # 避免重复添加别名
+            grep -q "alias s='bash /root/skywrt.sh'" /root/.bashrc || {
+                echo "# SkyWRT 脚本快捷键" >> /root/.bashrc
+                echo "alias s='bash /root/skywrt.sh'" >> /root/.bashrc
+            }
+            source /root/.bashrc
+            echo -e "${GREEN}已设置快捷键 s，运行 's' 即可启动脚本${RESET}"
+            send_stats "设置脚本快捷键 s"
             break_end
             ;;
         2)
-            echo -e "${YELLOW}请输入自定义快捷键（格式：alias 别名='命令'）${RESET}"
-            read -e -p "例如：alias gs='git status': " custom_alias
-            if [ -n "$custom_alias" ]; then
-                echo "$custom_alias" >> ~/.bashrc
-                source ~/.bashrc
-                echo -e "${GREEN}已添加自定义快捷键${RESET}"
-                send_stats "设置自定义快捷键"
-            else
-                echo -e "${RED}未输入有效快捷键${RESET}"
-            fi
-            break_end
-            ;;
-        3)
             if ! command -v nano &>/dev/null; then
                 echo -e "${YELLOW}正在安装 nano...${RESET}"
                 install nano
             fi
-            nano ~/.bashrc
-            source ~/.bashrc
+            nano /root/.bashrc
+            source /root/.bashrc
             echo -e "${GREEN}.bashrc 文件已编辑并重新加载${RESET}"
             send_stats "编辑 .bashrc 文件"
             break_end
@@ -549,12 +535,11 @@ update_script() {
         echo -e "发现新版本！当前版本 v$SH_VERSION 最新版本 ${YELLOW}v$sh_v_new${RESET}"
         read -e -p "是否更新到最新版本？(y/n): " update_choice
         if [ "$update_choice" = "y" ] || [ "$update_choice" = "Y" ]; then
-            curl -sS -o ~/skywrt.sh $FALLBACK_URL && chmod +x ~/skywrt.sh
-            cp -f ~/skywrt.sh /usr/local/bin/sw
+            curl -sS -o /root/skywrt.sh $FALLBACK_URL && chmod +x /root/skywrt.sh
             echo -e "${GREEN}脚本已更新到最新版本！${YELLOW}v$sh_v_new${RESET}"
             send_stats "脚本更新到 v$sh_v_new"
             break_end
-            ~/skywrt.sh
+            /root/skywrt.sh
             exit
         else
             echo -e "${YELLOW}已取消更新${RESET}"
@@ -623,10 +608,10 @@ main_menu() {
 # 快捷命令处理
 # ========================
 if [ "$#" -eq 0 ]; then
-    # 确保 /usr/local/bin/sw 存在且可执行
-    if [ -f ~/skywrt.sh ]; then
-        cp -f ~/skywrt.sh /usr/local/bin/sw > /dev/null 2>&1
-        chmod +x /usr/local/bin/sw > /dev/null 2>&1
+    # 确保 /root/skywrt.sh 存在且可执行
+    if [ -f "$0" ]; then
+        cp -f "$0" /root/skywrt.sh > /dev/null 2>&1
+        chmod +x /root/skywrt.sh > /dev/null 2>&1
     fi
     main_menu
 else
