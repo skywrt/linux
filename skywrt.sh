@@ -472,8 +472,9 @@ set_shortcuts() {
     send_stats "快捷键设置"
     echo -e "${CYAN}快捷键设置${RESET}"
     echo "------------------------"
-    echo "1. 设置 Bash 快捷键 (如 ll, la)"
+    echo "1. 设置 Bash 常用快捷键 (s, ll, la, lla, cls)"
     echo "2. 设置自定义快捷键"
+    echo "3. 编辑 .bashrc 文件"
     echo "------------------------"
     echo "0. 返回主菜单"
     echo "------------------------"
@@ -487,13 +488,14 @@ set_shortcuts() {
             fi
             cat >> ~/.bashrc << EOF
 # SkyWRT 自定义快捷键
+alias s='bash /usr/local/bin/sw'
 alias ll='ls -l'
 alias la='ls -a'
 alias lla='ls -la'
 alias cls='clear'
 EOF
             source ~/.bashrc
-            echo -e "${GREEN}已设置 Bash 快捷键（ll, la, lla, cls）${RESET}"
+            echo -e "${GREEN}已设置 Bash 快捷键（s, ll, la, lla, cls）${RESET}"
             send_stats "设置 Bash 快捷键"
             break_end
             ;;
@@ -508,6 +510,17 @@ EOF
             else
                 echo -e "${RED}未输入有效快捷键${RESET}"
             fi
+            break_end
+            ;;
+        3)
+            if ! command -v nano &>/dev/null; then
+                echo -e "${YELLOW}正在安装 nano...${RESET}"
+                install nano
+            fi
+            nano ~/.bashrc
+            source ~/.bashrc
+            echo -e "${GREEN}.bashrc 文件已编辑并重新加载${RESET}"
+            send_stats "编辑 .bashrc 文件"
             break_end
             ;;
         0)
@@ -610,7 +623,11 @@ main_menu() {
 # 快捷命令处理
 # ========================
 if [ "$#" -eq 0 ]; then
-    cp -f ~/skywrt.sh /usr/local/bin/sw > /dev/null 2>&1
+    # 确保 /usr/local/bin/sw 存在且可执行
+    if [ -f ~/skywrt.sh ]; then
+        cp -f ~/skywrt.sh /usr/local/bin/sw > /dev/null 2>&1
+        chmod +x /usr/local/bin/sw > /dev/null 2>&1
+    fi
     main_menu
 else
     case $1 in
