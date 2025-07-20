@@ -473,8 +473,7 @@ set_shortcuts() {
     send_stats "快捷键设置"
     echo -e "${CYAN}快捷键设置${RESET}"
     echo "------------------------"
-    echo "1. 设置脚本快捷键 (s)"
-    echo "2. 编辑 .bashrc 文件"
+    echo "1. 设置脚本快捷键"
     echo "------------------------"
     echo "0. 返回主菜单"
     echo "------------------------"
@@ -482,38 +481,34 @@ set_shortcuts() {
 
     case $shortcut_choice in
         1)
-            echo -e "${YELLOW}设置脚本快捷键 s...${RESET}"
-            cp -f "$0" /root/skywrt.sh > /dev/null 2>&1
-            chmod +x /root/skywrt.sh > /dev/null 2>&1
-            if [ ! -f /root/.bashrc ]; then
-                touch /root/.bashrc
-            fi
-            # 避免重复添加别名
-            grep -q "alias s='bash /root/skywrt.sh'" /root/.bashrc || {
-                echo "# SkyWRT 脚本快捷键" >> /root/.bashrc
-                echo "alias s='bash /root/skywrt.sh'" >> /root/.bashrc
-            }
-            source /root/.bashrc
-            echo -e "${GREEN}已设置快捷键 s，运行 's' 即可启动脚本${RESET}"
-            send_stats "设置脚本快捷键 s"
-            break_end
-            ;;
-        2)
-            if ! command -v nano &>/dev/null; then
-                echo -e "${YELLOW}正在安装 nano...${RESET}"
-                install nano
-            fi
-            nano /root/.bashrc
-            source /root/.bashrc
-            echo -e "${GREEN}.bashrc 文件已编辑并重新加载${RESET}"
-            send_stats "编辑 .bashrc 文件"
-            break_end
+            while true; do
+                clear
+                read -e -p "请输入你的快捷键（输入0退出）: " kuaijiejian
+                if [ "$kuaijiejian" == "0" ]; then
+                    break_end
+                    break
+                fi
+                if [ -z "$kuaijiejian" ]; then
+                    echo -e "${RED}快捷键不能为空！${RESET}"
+                    break_end
+                    continue
+                fi
+                cp -f "$0" /usr/local/bin/sw > /dev/null 2>&1
+                chmod +x /usr/local/bin/sw > /dev/null 2>&1
+                find /usr/local/bin/ -type l -exec bash -c 'test "$(readlink -f "{}")" = "/usr/local/bin/sw" && rm -f "{}"' \;
+                ln -s /usr/local/bin/sw /usr/local/bin/$kuaijiejian
+                echo -e "${GREEN}快捷键 $kuaijiejian 已设置${RESET}"
+                send_stats "脚本快捷键已设置: $kuaijiejian"
+                break_end
+                break
+            done
             ;;
         0)
             return
             ;;
         *)
             echo -e "${RED}无效的选择!${RESET}"
+            break_end
             ;;
     esac
 }
@@ -535,11 +530,11 @@ update_script() {
         echo -e "发现新版本！当前版本 v$SH_VERSION 最新版本 ${YELLOW}v$sh_v_new${RESET}"
         read -e -p "是否更新到最新版本？(y/n): " update_choice
         if [ "$update_choice" = "y" ] || [ "$update_choice" = "Y" ]; then
-            curl -sS -o /root/skywrt.sh $FALLBACK_URL && chmod +x /root/skywrt.sh
+            curl -sS -o /usr/local/bin/sw $FALLBACK_URL && chmod +x /usr/local/bin/sw
             echo -e "${GREEN}脚本已更新到最新版本！${YELLOW}v$sh_v_new${RESET}"
             send_stats "脚本更新到 v$sh_v_new"
             break_end
-            /root/skywrt.sh
+            /usr/local/bin/sw
             exit
         else
             echo -e "${YELLOW}已取消更新${RESET}"
@@ -608,11 +603,9 @@ main_menu() {
 # 快捷命令处理
 # ========================
 if [ "$#" -eq 0 ]; then
-    # 确保 /root/skywrt.sh 存在且可执行
-    if [ -f "$0" ]; then
-        cp -f "$0" /root/skywrt.sh > /dev/null 2>&1
-        chmod +x /root/skywrt.sh > /dev/null 2>&1
-    fi
+    # 确保 /usr/local/bin/sw 存在且可执行
+    cp -f "$0" /usr/local/bin/sw > /dev/null 2>&1
+    chmod +x /usr/local/bin/sw > /dev/null 2>&1
     main_menu
 else
     case $1 in
